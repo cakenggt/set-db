@@ -32,18 +32,22 @@ class SetDB extends EventEmitter {
 	}
 
 	query(func) {
-		return Object.keys(this.db).map(elem => this.db[elem]).filter(func);
+		return Object.keys(this.db).map(elem => Object.assign({}, this.db[elem])).filter(func);
 	}
 
 	get(id) {
-		return this.db[id];
+		const elem = this.db[id];
+		if (elem) {
+			return Object.assign({}, elem);
+		}
+		return elem;
 	}
 
 	put(elem) {
 		const id = elem[this.indexBy];
 		if (!this.db[id] && this.validator(elem)) {
       // No entry exists in db currently
-			this.db[id] = elem;
+			this.db[id] = Object.assign({}, elem);
 			upload(this)
 			.then(hash => {
 				sendMessage(this, JSON.stringify({

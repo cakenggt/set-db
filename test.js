@@ -50,3 +50,16 @@ test('sync dbs', t => {
 		db2.disconnect();
 	});
 });
+
+test('no mutate', t => {
+	const db1 = new SetDB(network);
+
+	t.plan(1);
+	const orig = {
+		1: {_id: '1', name: 'a'}
+	};
+	db1.put(orig['1']);
+	orig['1'].name = 'new';
+	t.notDeepEqual(db1.db, orig);
+	db1.disconnect();
+});
