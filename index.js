@@ -1,3 +1,5 @@
+const EventEmitter = require('events');
+
 const request = require('request');
 const atob = require('atob');
 const ipfsAPI = require('ipfs-api');
@@ -6,30 +8,28 @@ const ipfs = ipfsAPI();
 
 const localhost = 'http://localhost:5001/api/v0/';
 
-class SetDB {
+class SetDB extends EventEmitter {
   constructor(topic, options) {
+    super();
     options = options || {};
     this.topic = topic;
-    //validator is a filter function which has 'this' set to the map of the db by _id
-    this.validator = options.validator;
+    //validator is a filter function
+    this.validator = options.validator || (elem => true);
     this.dbHash = options.dbHash;
     this.indexBy = options.indexBy || '_id';
     this.db = {};
     this.connection;
-    //this.uploadDB();
     this.loadDB();
     this.subscribe();
   }
 
   loadDB() {
-    //Default hash is an empty map
     if (this.dbHash) {
       ipfs.files.get(this.dbHash, (err, stream) => {
         stream.on('data', file => {
           if (file.content) {
             file.content.on('data', str => {
-              console.log('contents are');
-              console.log(str.toString());
+              this.db = JSON.parse(str.toString());
             });
           }
         })
@@ -43,27 +43,20 @@ class SetDB {
         path: 'db.json',
         content: new Buffer(JSON.stringify(this.db))
       }
-    ])
-    .then(res => {
-      console.log(res);
-    });
+    ]);
   }
 
   subscribe() {
     this.connection = request.get(`${localhost}pubsub/sub?arg=${encodeURIComponent(this.topic)}`);
     this.connection
-    .on('data', this.receiveMessage)
+    .on('data', this.receiveMessage.bind(this))
     .on('error', console.error);
   }
 
   receiveMessage(message) {
-    //TODO not done yet!
-    console.log('new data');
-    console.log(message.toString());
     var json = JSON.parse(message.toString());
     if (json.data) {
       var data = atob(json.data);
-      console.log(data);
       try {
         var parsedData = JSON.parse(data);
         this.dealWithParsedMessage(parsedData);
@@ -85,11 +78,31 @@ class SetDB {
           } catch (e) {
             console.log(`Error in new data due to ${e}`);
           }
+          var newValues = Object.keys(newDB).map(elem => newDB[elem]);
           if (this.validator) {
             //Remove any invalid entries according to the validator
-            newDB = Object.keys(newDB).map(elem => newDB[elem]).filter(this.validator, this.db);
+            newValues = newValues.filter(this.validator);
           }
-          //NOT FINISHED
+          var added = false;
+          newValues.reduce((db, elem) => {
+            var id = elem[this.indexBy];
+            if (!db[id]) {
+              added = true;
+              db[id] = elem;
+            }
+            return db;
+          }, this.db);
+          if (added) {
+            this.emit('sync');
+            //If any were added, publish new db
+            this.upload()
+            .then(hash => {
+              this.sendMessage(JSON.stringify({
+                type: 'NEW',
+                data: hash
+              }));
+            });
+          }
         });
     }
   }
@@ -107,7 +120,10 @@ class SetDB {
     //sort and then upload, returns a promise
     var values = Object.keys(this.db).map(elem => this.db[elem]);
     values.sort((a, b) => a[this.indexBy].localeCompare(b[this.indexBy]));
-    var db = values.reduce((elem, result) => result[elem[this.indexBy]] = elem, {});
+    var db = values.reduce((result, elem) => {
+      result[elem[this.indexBy]] = elem;
+      return result;
+    }, {});
     this.db = db;
     return ipfs.files.add([
       {
@@ -116,17 +132,18 @@ class SetDB {
       }
     ])
     .then(res => {
-      console.log(`New db hash is: ${res[0].hash}`);
-      return res[0].hash;
+      var hash = res[0].hash;
+      this.dbHash = hash;
+      return hash;
     });
   }
 
   put(elem) {
     var id = elem[this.indexBy];
-    if (!this.db[id]) {
+    if (!this.db[id] && this.validator(elem)) {
       //No entry exists in db currently
       this.db[id] = elem;
-      upload()
+      this.upload()
       .then(hash => {
         this.sendMessage(JSON.stringify({
           type: 'NEW',
@@ -134,6 +151,11 @@ class SetDB {
         }));
       });
     }
+  }
+
+  stop() {
+    this.connection.abort();
+    this.connection = null;
   }
 }
 
