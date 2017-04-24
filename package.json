@@ -15,6 +15,17 @@
   },
   "devDependencies": {
     "leaked-handles": "^5.2.0",
-    "tape": "^4.6.3"
+    "tape": "^4.6.3",
+    "xo": "^0.18.1"
+  },
+  "xo": {
+    "rules": {
+      "linebreak-style": [
+        "off"
+      ]
+    },
+    "envs": [
+      "node"
+    ]
   }
 }

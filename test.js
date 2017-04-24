@@ -16,8 +16,8 @@ test('put dbs', t => {
   });
   db2.on('sync', () => {
     t.deepEqual(db1.db, db2.db);
-    db1.stop();
-    db2.stop();
+    db1.disconnect();
+    db2.disconnect();
   });
 });
 
@@ -33,7 +33,7 @@ test('load db', t => {
         name: 'testname'
       }
     });
-    db.stop();
+    db.disconnect();
   });
 });
 
@@ -46,8 +46,8 @@ test('sync dbs', t => {
   t.plan(1);
   db2.on('sync', () => {
     t.deepEqual(db1.db, db2.db);
-    db1.stop();
-    db2.stop();
+    db1.disconnect();
+    db2.disconnect();
   });
 });
 
