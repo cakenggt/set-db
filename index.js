@@ -105,7 +105,8 @@ function loadDB(self) {
 			}
 		});
 	} else {
-		self.emit('ready');
+		// Putting in setTimeout to add to new thread
+		setTimeout(() => self.emit('ready'), 0);
 	}
 }
 

@@ -75,3 +75,13 @@ test('hash change after put', t => {
 		db.disconnect();
 	});
 });
+
+test('ready called in new thread', t => {
+	const db = new SetDB(network);
+
+	t.plan(1);
+	db.on('ready', () => {
+		t.pass();
+		db.disconnect();
+	});
+});
