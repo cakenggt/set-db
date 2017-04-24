@@ -21,6 +21,7 @@ class SetDB extends EventEmitter {
     this.connection;
     this.loadDB();
     this.subscribe();
+    this.ask();
   }
 
   loadDB() {
@@ -30,10 +31,13 @@ class SetDB extends EventEmitter {
           if (file.content) {
             file.content.on('data', str => {
               this.db = JSON.parse(str.toString());
+              this.emit('ready');
             });
           }
         })
       });
+    } else {
+      this.emit('ready');
     }
   }
 
@@ -51,6 +55,12 @@ class SetDB extends EventEmitter {
     this.connection
     .on('data', this.receiveMessage.bind(this))
     .on('error', console.error);
+  }
+
+  ask() {
+    this.sendMessage(JSON.stringify({
+      type: 'ASK'
+    }));
   }
 
   receiveMessage(message) {
@@ -104,6 +114,13 @@ class SetDB extends EventEmitter {
             });
           }
         });
+      case 'ASK':
+        if (this.dbHash) {
+          this.sendMessage(JSON.stringify({
+            type: 'NEW',
+            data: this.dbHash
+          }));
+        }
     }
   }
 
