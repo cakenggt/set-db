@@ -1,6 +1,6 @@
 {
   "name": "set-db",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Set-DB is a synchronized distributed docstore database backed by IPFS using pubsub",
   "main": "index.js",
   "scripts": {
