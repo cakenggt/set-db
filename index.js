@@ -27,7 +27,7 @@ class SetDB extends EventEmitter {
 		this.connection = request.get(`${localhost}pubsub/sub?arg=${encodeURIComponent(this.topic)}`);
 		this.connection
     .on('data', data => receiveMessage(this, data))
-    .on('error', console.error);
+    .on('error', err => this.emit('error', err));
 		ask(this);
 	}
 
@@ -63,7 +63,9 @@ class SetDB extends EventEmitter {
 function ipfsGetFile(hash) {
 	return new Promise((resolve, reject) => {
 		ipfs.files.get(hash, (err, stream) => {
-			if (!err) {
+			if (err) {
+				reject(err);
+			} else {
 				stream.on('data', file => {
 					if (file.content) {
 						file.content.on('data', str => {
@@ -84,7 +86,9 @@ function ipfsGetFile(hash) {
 function loadDB(self) {
 	if (self.dbHash) {
 		ipfs.files.get(self.dbHash, (err, stream) => {
-			if (!err) {
+			if (err) {
+				self.emit('error', err);
+			} else {
 				stream.on('data', file => {
 					if (file.content) {
 						file.content.on('data', str => {
@@ -156,6 +160,9 @@ function dealWithParsedMessage(self, message) {
 						}));
 					});
 				}
+			})
+			.catch(err => {
+				self.emit('error', err);
 			});
 			break;
 		case 'ASK':
@@ -195,6 +202,9 @@ function upload(self) {
 		const hash = res[0].hash;
 		self.dbHash = hash;
 		return hash;
+	})
+	.catch(err => {
+		self.emit('error', err);
 	});
 }
 
