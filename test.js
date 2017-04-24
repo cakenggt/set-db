@@ -63,3 +63,15 @@ test('no mutate', t => {
 	t.notDeepEqual(db1.db, orig);
 	db1.disconnect();
 });
+
+test('hash change after put', t => {
+	const db = new SetDB(network);
+
+	t.plan(1);
+	const hash1 = db.dbHash;
+	db.put({_id: '1', name: 'test'});
+	db.on('sync', () => {
+		t.notEqual(hash1, db.dbHash);
+		db.disconnect();
+	});
+});

@@ -50,6 +50,7 @@ class SetDB extends EventEmitter {
 			this.db[id] = Object.assign({}, elem);
 			upload(this)
 			.then(hash => {
+				this.emit('sync');
 				sendMessage(this, JSON.stringify({
 					type: 'NEW',
 					data: hash

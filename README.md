@@ -39,7 +39,7 @@ Fired either when the SetDB successfully hydrates itself from it's `dbHash` entr
 
 ### `sync`
 
-Fired when new data is incorporated into the SetDB from some other SetDB instance.
+Fired when new data is incorporated into the SetDB from some other SetDB instance, or put in by this instance.
 
 ### `error`
 
