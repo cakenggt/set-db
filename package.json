@@ -6,7 +6,7 @@
   "scripts": {
     "test": "tape test.js"
   },
-  "author": "",
+  "author": "Alec Lownes",
   "license": "ISC",
   "dependencies": {
     "atob": "^2.0.3",
@@ -27,5 +27,16 @@
     "envs": [
       "node"
     ]
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cakenggt/set-db.git"
+  },
+  "keywords": [
+    "ipfs"
+  ],
+  "bugs": {
+    "url": "https://github.com/cakenggt/set-db/issues"
+  },
+  "homepage": "https://github.com/cakenggt/set-db#readme"
 }
