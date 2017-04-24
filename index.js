@@ -156,10 +156,10 @@ function dealWithParsedMessage(self, message) {
 					return db;
 				}, self.db);
 				if (added) {
-					self.emit('sync');
 					// If any were added, publish new db
 					upload(self)
 					.then(hash => {
+						self.emit('sync');
 						sendMessage(self, JSON.stringify({
 							type: 'NEW',
 							data: hash

@@ -43,9 +43,10 @@ test('sync dbs', t => {
 	});
 	const db2 = new SetDB(network);
 
-	t.plan(1);
+	t.plan(2);
 	db2.on('sync', () => {
 		t.deepEqual(db1.db, db2.db);
+		t.equal(db1.dbHash, db2.dbHash);
 		db1.disconnect();
 		db2.disconnect();
 	});
