@@ -97,7 +97,7 @@ function loadDB(self) {
 				stream.on('data', file => {
 					if (file.content) {
 						file.content.on('data', str => {
-							self.db = JSON.parse(str.toString());
+							addValidatedEntries(self, JSON.parse(str.toString()));
 							self.emit('ready');
 						});
 					}
@@ -108,6 +108,28 @@ function loadDB(self) {
 		// Putting in setTimeout to add to new thread
 		setTimeout(() => self.emit('ready'), 0);
 	}
+}
+
+function addValidatedEntries(self, newDB) {
+	let newValues = Object.keys(newDB).map(elem => newDB[elem]);
+	if (self.validator) {
+		// Remove any invalid entries according to the validator
+		newValues = newValues.filter(self.validator);
+	}
+	let added = false;
+	newValues.reduce((db, elem) => {
+		const id = elem[self.indexBy];
+		if (id) {
+			// Entry must have id
+			if (!db[id]) {
+				// Entry must not already be in db
+				added = true;
+				db[id] = elem;
+			}
+		}
+		return db;
+	}, self.db);
+	return added;
 }
 
 function ask(self) {
@@ -141,20 +163,7 @@ function dealWithParsedMessage(self, message) {
 				} catch (err) {
 					console.log(`Error in new data due to ${err}`);
 				}
-				let newValues = Object.keys(newDB).map(elem => newDB[elem]);
-				if (self.validator) {
-					// Remove any invalid entries according to the validator
-					newValues = newValues.filter(self.validator);
-				}
-				let added = false;
-				newValues.reduce((db, elem) => {
-					const id = elem[self.indexBy];
-					if (!db[id]) {
-						added = true;
-						db[id] = elem;
-					}
-					return db;
-				}, self.db);
+				const added = addValidatedEntries(self, newDB);
 				if (added) {
 					// If any were added, publish new db
 					upload(self)
