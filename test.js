@@ -148,3 +148,27 @@ test('first small, then big', t => {
 		});
 	});
 });
+
+test('huge put', t => {
+	t.plan(1);
+
+	const db1 = new SetDB(network);
+	const db2 = new SetDB(network);
+
+	let str = '';
+	for (let i = 0; i < 10000; i++) {
+		str += 'a';
+	}
+
+	afterAllEvent([db1, db2], 'ready', () => {
+		db1.put({
+			_id: '1',
+			data: str
+		});
+		db2.on('sync', () => {
+			t.pass();
+			db1.disconnect();
+			db2.disconnect();
+		});
+	});
+});

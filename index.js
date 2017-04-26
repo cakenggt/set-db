@@ -78,14 +78,18 @@ function ipfsGetFile(hash) {
 			if (err) {
 				reject(err);
 			} else {
+				const total = [];
 				stream.on('data', file => {
 					if (file.content) {
-						file.content.on('data', str => {
-							resolve(str.toString());
+						file.content.on('data', chunk => {
+							total.push(chunk);
 						});
 					} else {
 						reject(new Error('No file content'));
 					}
+				});
+				stream.on('end', () => {
+					resolve(Buffer.concat(total).toString());
 				});
 				stream.on('error', e => {
 					reject(e);
