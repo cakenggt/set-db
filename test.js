@@ -4,35 +4,58 @@ const SetDB = require('./index');
 
 const network = 'test';
 
+const dbStates = {
+	QmPVfQJ4yjgwz2XQESBjRmJmYZYjJdYW2bd61jUMAqis6V: {
+		1: {
+			_id: '1',
+			name: 'testname'
+		}
+	}
+};
+
+function afterAllEvent(dbs, event, callback) {
+	const readies = [];
+	dbs.forEach((db, i) => {
+		readies[i] = false;
+		db.on(event, () => {
+			readies[i] = true;
+			for (let j = 0; j < readies.length; j++) {
+				if (!readies[j]) {
+					return;
+				}
+			}
+			callback();
+		});
+	});
+}
+
 test('put dbs', t => {
 	const db1 = new SetDB(network);
 	const db2 = new SetDB(network);
 
 	t.plan(2);
 	t.deepEqual(db1.db, db2.db);
-	db1.put({
-		_id: '1',
-		name: 'testname'
-	});
-	db2.on('sync', () => {
-		t.deepEqual(db1.db, db2.db);
-		db1.disconnect();
-		db2.disconnect();
+	afterAllEvent([db1, db2], 'ready', () => {
+		db1.put({
+			_id: '1',
+			name: 'testname'
+		});
+		db2.on('sync', () => {
+			t.deepEqual(db1.db, db2.db);
+			db1.disconnect();
+			db2.disconnect();
+		});
 	});
 });
 
 test('load db', t => {
+	const hash = 'QmPVfQJ4yjgwz2XQESBjRmJmYZYjJdYW2bd61jUMAqis6V';
 	const db = new SetDB(network, {
-		dbHash: 'QmPVfQJ4yjgwz2XQESBjRmJmYZYjJdYW2bd61jUMAqis6V'
+		dbHash: hash
 	});
 	t.plan(1);
 	db.on('ready', () => {
-		t.deepEqual(db.db, {
-			1: {
-				_id: '1',
-				name: 'testname'
-			}
-		});
+		t.deepEqual(db.db, dbStates[hash]);
 		db.disconnect();
 	});
 });
@@ -44,11 +67,14 @@ test('sync dbs', t => {
 	const db2 = new SetDB(network);
 
 	t.plan(2);
-	db2.on('sync', () => {
-		t.deepEqual(db1.db, db2.db);
-		t.equal(db1.dbHash, db2.dbHash);
-		db1.disconnect();
-		db2.disconnect();
+
+	afterAllEvent([db1, db2], 'ready', () => {
+		db2.on('sync', () => {
+			t.deepEqual(db1.db, db2.db);
+			t.equal(db1.dbHash, db2.dbHash);
+			db1.disconnect();
+			db2.disconnect();
+		});
 	});
 });
 
@@ -72,10 +98,12 @@ test('hash change after put', t => {
 
 	t.plan(1);
 	const hash1 = db.dbHash;
-	db.put({_id: '1', name: 'test'});
-	db.on('sync', () => {
-		t.notEqual(hash1, db.dbHash);
-		db.disconnect();
+	db.on('ready', () => {
+		db.put({_id: '1', name: 'test'});
+		db.on('sync', () => {
+			t.notEqual(hash1, db.dbHash);
+			db.disconnect();
+		});
 	});
 });
 
