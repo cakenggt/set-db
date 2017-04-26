@@ -20,7 +20,7 @@ class SetDB extends EventEmitter {
 		this.db = {};
 		this.connection = null;
 		loadDB(this);
-		this.connect();
+		this.on('ready', () => this.connect());
 	}
 
 	connect() {
@@ -28,6 +28,13 @@ class SetDB extends EventEmitter {
 		this.connection
     .on('data', data => receiveMessage(this, data))
     .on('error', err => this.emit('error', err));
+		if (this.dbHash) {
+			// If they have a previously saved dbHash, send it as NEW
+			sendMessage(this, JSON.stringify({
+				type: 'NEW',
+				data: this.dbHash
+			}));
+		}
 		ask(this);
 	}
 
