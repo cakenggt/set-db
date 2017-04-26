@@ -105,13 +105,17 @@ function loadDB(self) {
 			if (err) {
 				self.emit('error', err);
 			} else {
+				const total = [];
 				stream.on('data', file => {
 					if (file.content) {
-						file.content.on('data', str => {
-							addValidatedEntries(self, JSON.parse(str.toString()));
-							self.emit('ready');
+						file.content.on('data', chunk => {
+							total.push(chunk);
 						});
 					}
+				});
+				stream.on('end', () => {
+					addValidatedEntries(self, JSON.parse(Buffer.concat(total).toString()));
+					self.emit('ready');
 				});
 			}
 		});

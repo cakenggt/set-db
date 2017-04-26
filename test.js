@@ -172,3 +172,16 @@ test('huge put', t => {
 		});
 	});
 });
+
+test('huge loadDb', t => {
+	t.plan(1);
+
+	const db = new SetDB(network, {
+		dbHash: 'QmdMFBpKZDiFV8kDT1w73cEMnpAyU1dVZpZEPri1wtqcUB'
+	});
+
+	db.on('ready', () => {
+		t.pass();
+		db.disconnect();
+	});
+});
