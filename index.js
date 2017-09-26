@@ -4,7 +4,7 @@ const request = require('request');
 const atob = require('atob');
 const ipfsAPI = require('ipfs-api');
 
-const ipfs = ipfsAPI();
+const defaultIpfs = ipfsAPI();
 
 const localhost = 'http://localhost:5001/api/v0/';
 
@@ -17,6 +17,7 @@ class SetDB extends EventEmitter {
 		this.validator = options.validator || (() => true);
 		this.dbHash = options.dbHash;
 		this.indexBy = options.indexBy || '_id';
+		this.ipfs = options.ipfs || defaultIpfs;
 		this.db = {};
 		this.connection = null;
 		loadDB(this);
@@ -72,9 +73,9 @@ class SetDB extends EventEmitter {
 	}
 }
 
-function ipfsGetFile(hash) {
+function ipfsGetFile(self, hash) {
 	return new Promise((resolve, reject) => {
-		ipfs.files.get(hash, (err, stream) => {
+		self.ipfs.files.get(hash, (err, stream) => {
 			if (err) {
 				reject(err);
 			} else {
@@ -101,7 +102,7 @@ function ipfsGetFile(hash) {
 
 function loadDB(self) {
 	if (self.dbHash) {
-		ipfs.files.get(self.dbHash, (err, stream) => {
+		self.ipfs.files.get(self.dbHash, (err, stream) => {
 			if (err) {
 				self.emit('error', err);
 			} else {
@@ -170,7 +171,7 @@ function dealWithParsedMessage(self, message) {
 	switch (message.type) {
 		case 'NEW':
 			// A new hash was published
-			ipfsGetFile(message.data)
+			ipfsGetFile(self, message.data)
 			.then(content => {
 				let newDB = {};
 				try {
@@ -222,7 +223,7 @@ function upload(self) {
 		return result;
 	}, {});
 	self.db = db;
-	return ipfs.files.add([
+	return self.ipfs.files.add([
 		{
 			path: 'db.json',
 			content: Buffer.from(JSON.stringify(self.db))
