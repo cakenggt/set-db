@@ -10,8 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "atob": "^2.0.3",
-    "ipfs-api": "^14.0.0",
-    "request": "^2.81.0"
+    "ipfs": "^0.28.2"
   },
   "devDependencies": {
     "leaked-handles": "^5.2.0",

@@ -10,7 +10,8 @@ The constructor for SetDB takes in an options object detailed below.
 * `validator` Function which new entries to the db are passed through. Should return `true` if the entry is valid, or `false` if it isn't. Default is a function which always returns `true`.
 * `dbHash` IPFS multihash of a database to hydrate the SetDB instance with. Default is none.
 * `indexBy` Which key in the records to index the SetDB by. Default is `_id`.
-* `ipfs` An IPFS Api object gotten either from `ipfsd-ctl` or `js-ipfs-api`. Default is from `js-ipfs-api`.
+* `ipfs` An IPFS node object gotten from `js-ipfs`.
+* `repo` Optional repo string.
 
 ### `connect`
 

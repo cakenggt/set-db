@@ -1,42 +1,58 @@
 const EventEmitter = require('events');
 
-const request = require('request');
 const atob = require('atob');
-const ipfsAPI = require('ipfs-api');
-
-const defaultIpfs = ipfsAPI();
-
-const localhost = 'http://localhost:5001/api/v0/';
+const IPFS = require('ipfs');
 
 class SetDB extends EventEmitter {
 	constructor(topic, options) {
 		super();
+		this.receiveMessage = this.receiveMessage.bind(this);
 		options = options || {};
 		this.topic = topic;
-    // Validator is a filter function
+		// Validator is a filter function
 		this.validator = options.validator || (() => true);
 		this.dbHash = options.dbHash;
 		this.indexBy = options.indexBy || '_id';
-		this.ipfs = options.ipfs || defaultIpfs;
 		this.db = {};
-		this.connection = null;
-		loadDB(this);
-		this.on('ready', () => this.connect());
+		this.DEBUG = options.DEBUG;
+		if (options.ipfs) {
+			this.ipfs = options.ipfs;
+			this.loadDB();
+		} else {
+			this.ipfs = new IPFS({
+				EXPERIMENTAL: {
+					pubsub: true
+				}
+			});
+			this.ipfs.on('ready', () => {
+				this.loadDB();
+			});
+		}
+	}
+
+	start() {
+		this.ipfs.start();
+	}
+
+	stop() {
+		this.ipfs.stop();
 	}
 
 	connect() {
-		this.connection = request.get(`${localhost}pubsub/sub?arg=${encodeURIComponent(this.topic)}`);
-		this.connection
-    .on('data', data => receiveMessage(this, data))
-    .on('error', err => this.emit('error', err));
-		if (this.dbHash) {
-			// If they have a previously saved dbHash, send it as NEW
-			sendMessage(this, JSON.stringify({
-				type: 'NEW',
-				data: this.dbHash
-			}));
-		}
-		ask(this);
+		this.ipfs.pubsub.subscribe(this.topic, this.receiveMessage)
+		.then(() => {
+			this.emit('ready');
+
+			if (this.dbHash) {
+				// If they have a previously saved dbHash, send it as NEW
+				this.sendMessage(JSON.stringify({
+					type: 'NEW',
+					data: this.dbHash
+				}));
+			}
+			this.ask();
+		})
+		.catch(err => this.emit('error', err));
 	}
 
 	query(func) {
@@ -54,12 +70,12 @@ class SetDB extends EventEmitter {
 	put(elem) {
 		const id = elem[this.indexBy];
 		if (!this.db[id] && this.validator(elem)) {
-      // No entry exists in db currently
+			// No entry exists in db currently
 			this.db[id] = Object.assign({}, elem);
-			upload(this)
+			this.upload()
 			.then(hash => {
 				this.emit('sync');
-				sendMessage(this, JSON.stringify({
+				this.sendMessage(JSON.stringify({
 					type: 'NEW',
 					data: hash
 				}));
@@ -68,175 +84,139 @@ class SetDB extends EventEmitter {
 	}
 
 	disconnect() {
-		this.connection.abort();
-		this.connection = null;
+		this.ipfs.pubsub.unsubscribe(this.topic, this.receiveMessage);
 	}
-}
 
-function ipfsGetFile(self, hash) {
-	return new Promise((resolve, reject) => {
-		self.ipfs.files.get(hash, (err, stream) => {
-			if (err) {
-				reject(err);
-			} else {
-				const total = [];
-				stream.on('data', file => {
-					if (file.content) {
-						file.content.on('data', chunk => {
-							total.push(chunk);
-						});
-					} else {
-						reject(new Error('No file content'));
-					}
-				});
-				stream.on('end', () => {
-					resolve(Buffer.concat(total).toString());
-				});
-				stream.on('error', e => {
-					reject(e);
-				});
-			}
-		});
-	});
-}
-
-function loadDB(self) {
-	if (self.dbHash) {
-		self.ipfs.files.get(self.dbHash, (err, stream) => {
-			if (err) {
-				self.emit('error', err);
-			} else {
-				const total = [];
-				stream.on('data', file => {
-					if (file.content) {
-						file.content.on('data', chunk => {
-							total.push(chunk);
-						});
-					}
-				});
-				stream.on('end', () => {
-					addValidatedEntries(self, JSON.parse(Buffer.concat(total).toString()));
-					self.emit('ready');
-				});
-			}
-		});
-	} else {
-		// Putting in setTimeout to add to new thread
-		setTimeout(() => self.emit('ready'), 0);
+	ipfsGetFile(hash) {
+		return this.ipfs.files.get(hash)
+		.then(files => files[0].content.toString('utf8'));
 	}
-}
 
-function addValidatedEntries(self, newDB) {
-	let newValues = Object.keys(newDB).map(elem => newDB[elem]);
-	if (self.validator) {
-		// Remove any invalid entries according to the validator
-		newValues = newValues.filter(self.validator);
-	}
-	let added = false;
-	newValues.reduce((db, elem) => {
-		const id = elem[self.indexBy];
-		if (id) {
-			// Entry must have id
-			if (!db[id]) {
-				// Entry must not already be in db
-				added = true;
-				db[id] = elem;
-			}
-		}
-		return db;
-	}, self.db);
-	return added;
-}
-
-function ask(self) {
-	sendMessage(self, JSON.stringify({
-		type: 'ASK'
-	}));
-}
-
-function receiveMessage(self, message) {
-	const json = JSON.parse(message.toString());
-	if (json.data) {
-		const data = atob(json.data);
-		try {
-			const parsedData = JSON.parse(data);
-			dealWithParsedMessage(self, parsedData);
-		} catch (err) {
-			console.log('Failed at parsing data because ' + err);
+	loadDB() {
+		if (this.dbHash) {
+			this.ipfs.files.get(this.dbHash)
+			.then(files => this.addValidatedEntries(JSON.parse(files[0].content.toString('utf8'))))
+			.then(() => this.connect());
+		} else {
+			this.connect();
 		}
 	}
-}
-
-function dealWithParsedMessage(self, message) {
-	switch (message.type) {
-		case 'NEW':
-			// A new hash was published
-			ipfsGetFile(self, message.data)
-			.then(content => {
-				let newDB = {};
+	
+	addValidatedEntries(newDB) {
+		let newValues = Object.keys(newDB).map(elem => newDB[elem]);
+		if (this.validator) {
+			// Remove any invalid entries according to the validator
+			newValues = newValues.filter(this.validator);
+		}
+		let added = false;
+		newValues.reduce((db, elem) => {
+			const id = elem[this.indexBy];
+			if (id) {
+				// Entry must have id
+				if (!db[id]) {
+					// Entry must not already be in db
+					added = true;
+					db[id] = elem;
+				}
+			}
+			return db;
+		}, this.db);
+		return added;
+	}
+	
+	ask() {
+		this.sendMessage(JSON.stringify({
+			type: 'ASK'
+		}));
+	}
+	
+	receiveMessage(message) {
+		this.ipfs.id()
+		.then(id => {
+			if (this.DEBUG || message.from !== id.id) {
 				try {
-					newDB = JSON.parse(content);
+					this.dealWithParsedMessage(JSON.parse(message.data.toString()));
 				} catch (err) {
-					console.log(`Error in new data due to ${err}`);
+					console.log('Failed at parsing data because ' + err);
 				}
-				const added = addValidatedEntries(self, newDB);
-				if (added) {
-					// If any were added, publish new db
-					upload(self)
-					.then(hash => {
-						self.emit('sync');
-						sendMessage(self, JSON.stringify({
-							type: 'NEW',
-							data: hash
-						}));
-					});
-				}
-			})
-			.catch(err => {
-				self.emit('error', err);
-			});
-			break;
-		case 'ASK':
-			if (self.dbHash) {
-				sendMessage(self, JSON.stringify({
-					type: 'NEW',
-					data: self.dbHash
-				}));
 			}
-			break;
-		default:
-			break;
+		});
+	}
+	
+	dealWithParsedMessage(message) {
+		switch (message.type) {
+			case 'NEW':
+				// A new hash was published
+				this.ipfsGetFile(message.data)
+				.then(content => {
+					let newDB = {};
+					try {
+						newDB = JSON.parse(content);
+					} catch (err) {
+						console.log(`Error in new data due to ${err}`);
+					}
+					const added = this.addValidatedEntries(newDB);
+					if (added) {
+						// If any were added, publish new db
+						this.upload(this)
+						.then(hash => {
+							this.emit('sync');
+							this.sendMessage(JSON.stringify({
+								type: 'NEW',
+								data: hash
+							}));
+						});
+					}
+				})
+				.catch(err => {
+					this.emit('error', err);
+				});
+				break;
+			case 'ASK':
+				if (this.dbHash) {
+					this.sendMessage(JSON.stringify({
+						type: 'NEW',
+						data: this.dbHash
+					}));
+				}
+				break;
+			default:
+				break;
+		}
+	}
+	
+	sendMessage(message) {
+		// Message must be a string
+		this.ipfs.pubsub.publish(this.topic, new Buffer(message));
+	}
+	
+	upload() {
+		// Sort and then upload, returns a promise
+		const values = Object.keys(this.db).map(elem => this.db[elem]);
+		values.sort((a, b) => a[this.indexBy].localeCompare(b[this.indexBy]));
+		const db = values.reduce((result, elem) => {
+			result[elem[this.indexBy]] = elem;
+			return result;
+		}, {});
+		this.db = db;
+		return this.ipfs.files.add([
+			{
+				path: 'db.json',
+				content: Buffer.from(JSON.stringify(this.db))
+			}
+		])
+		.then(files => {
+			const hash = files[0].hash;
+			this.dbHash = hash;
+			return hash;
+		})
+		.catch(err => {
+			this.emit('error', err);
+			Promise.reject(err);
+		});
 	}
 }
 
-function sendMessage(self, message) {
-	// Message must be a string
-	request.get(`${localhost}pubsub/pub?arg=${encodeURIComponent(self.topic)}&arg=${encodeURIComponent(message)}`);
-}
 
-function upload(self) {
-	// Sort and then upload, returns a promise
-	const values = Object.keys(self.db).map(elem => self.db[elem]);
-	values.sort((a, b) => a[self.indexBy].localeCompare(b[self.indexBy]));
-	const db = values.reduce((result, elem) => {
-		result[elem[self.indexBy]] = elem;
-		return result;
-	}, {});
-	self.db = db;
-	return self.ipfs.files.add([
-		{
-			path: 'db.json',
-			content: Buffer.from(JSON.stringify(self.db))
-		}
-	])
-	.then(res => {
-		const hash = res[0].hash;
-		self.dbHash = hash;
-		return hash;
-	})
-	.catch(err => {
-		self.emit('error', err);
-	});
-}
 
 module.exports = SetDB;
